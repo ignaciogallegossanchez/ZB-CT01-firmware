@@ -38,9 +38,18 @@
 /**********************************************************************
  * LOCAL CONSTANTS
  */
-#define PWM_FREQUENCY					1000	//1KHz
+#define PWM_FREQUENCY					6000	//6KHz (igual que el firmware de fabrica -> PMW_MAX_TICK=8000)
 #define PWM_FULL_DUTYCYCLE				100
 #define PMW_MAX_TICK		            (PWM_CLOCK_SOURCE / PWM_FREQUENCY)
+
+// Suelo de brillo (duty minimo). Medido en el HW por SWire: cmp=6 de 8000 (~0.075%)
+// enciende estable; cmp=5 se apaga. Como fraccion de PMW_MAX_TICK para seguir siendo
+// correcto si se cambia PWM_FREQUENCY.
+#define PWM_MIN_TICK					(PMW_MAX_TICK * 6 / 8000)
+
+// Nivel Zigbee minimo (1..254). Con la curva gamma con suelo el nivel 1 ya cae en
+// PWM_MIN_TICK, asi que 1 es el minimo real.
+#define LIGHT_MIN_LEVEL					1
 
 
 /**********************************************************************
@@ -78,6 +87,42 @@ void pwmSetDuty(u8 ch, u16 dutycycle)
 {
 #ifdef ZCL_LEVEL_CTRL
 	u32 cmp_tick = ((u32)dutycycle * PMW_MAX_TICK) / (ZCL_LEVEL_ATTR_MAX_LEVEL * PWM_FULL_DUTYCYCLE);
+	drv_pwm_cfg(ch, (u16)cmp_tick, PMW_MAX_TICK);
+#endif
+}
+
+/*********************************************************************
+ * @fn      pwmSetLevelGamma
+ *
+ * @brief   Fija el duty de un canal a partir del nivel de brillo (0..max) con
+ *          curva gamma cuadratica calculada a la resolucion completa del PWM.
+ *          A diferencia de pwmSetDuty, no trunca a 0..100 en un paso intermedio,
+ *          asi que los niveles bajos producen duties minusculos pero graduales
+ *          (arregla el "minimo demasiado alto" y la falta de escalones abajo).
+ *
+ * @param   ch		-	PWM channel
+ *          level	-	0..ZCL_LEVEL_ATTR_MAX_LEVEL
+ *
+ * @return  None
+ */
+void pwmSetLevelGamma(u8 ch, u16 level)
+{
+#ifdef ZCL_LEVEL_CTRL
+	u32 maxLevel = ZCL_LEVEL_ATTR_MAX_LEVEL;
+	u32 span;
+	u32 cmp_tick;
+
+	if(level == 0){
+		// canal apagado: respeta el color puro en los extremos de temperatura
+		// (temperatureToCW deja C o W a 0) sin encenderlo por el suelo.
+		drv_pwm_cfg(ch, 0, PMW_MAX_TICK);
+		return;
+	}
+
+	// gamma cuadratica CON suelo: nivel minimo -> PWM_MIN_TICK (suelo medido),
+	// nivel maximo -> PMW_MAX_TICK, sin truncar la zona baja a 0.
+	span = PMW_MAX_TICK - PWM_MIN_TICK;
+	cmp_tick = PWM_MIN_TICK + ((u32)level * level * span) / (maxLevel * maxLevel);
 	drv_pwm_cfg(ch, (u16)cmp_tick, PMW_MAX_TICK);
 #endif
 }
@@ -174,12 +219,18 @@ void hwLight_onOffUpdate(u8 onOff)
  */
 void hwLight_levelUpdate(u8 level)
 {
-#if !defined COLOR_RGB_SUPPORT || (COLOR_RGB_SUPPORT == 0)
-	level = (level < 0x10) ? 0x10 : level;
+#if COLOR_CCT_SUPPORT
+	// En CCT el brillo afecta a AMBOS canales manteniendo la temperatura de color:
+	// recalcula C/W con la temperatura actual y el nuevo nivel. Si no, al variar el
+	// brillo solo cambiaria el frio y se descuadraria el color.
+	zcl_lightColorCtrlAttr_t *pColor = zcl_colorAttrGet();
+	hwLight_colorUpdate_colorTemperature(pColor->colorTemperatureMireds, level);
+#elif !defined COLOR_RGB_SUPPORT || (COLOR_RGB_SUPPORT == 0)
+	if(level < LIGHT_MIN_LEVEL){
+		level = LIGHT_MIN_LEVEL;
+	}
 
-	u16 gammaCorrectLevel = ((u16)level * level) / ZCL_LEVEL_ATTR_MAX_LEVEL;
-
-	pwmSetDuty(COOL_LIGHT_PWM_CHANNEL, gammaCorrectLevel * PWM_FULL_DUTYCYCLE);
+	pwmSetLevelGamma(COOL_LIGHT_PWM_CHANNEL, level);
 #endif
 }
 
@@ -221,15 +272,14 @@ void hwLight_colorUpdate_colorTemperature(u16 colorTemperatureMireds, u8 level)
 	u8 C = 0;
 	u8 W = 0;
 
-	level = (level < 0x10) ? 0x10 : level;
+	if(level < LIGHT_MIN_LEVEL){
+		level = LIGHT_MIN_LEVEL;
+	}
 
 	temperatureToCW(colorTemperatureMireds, level, &C, &W);
 
-	u16 gammaCorrectC = ((u16)C * C) / ZCL_LEVEL_ATTR_MAX_LEVEL;
-	u16 gammaCorrectW = ((u16)W * W) / ZCL_LEVEL_ATTR_MAX_LEVEL;
-
-	pwmSetDuty(COOL_LIGHT_PWM_CHANNEL, gammaCorrectC * PWM_FULL_DUTYCYCLE);
-	pwmSetDuty(WARM_LIGHT_PWM_CHANNEL, gammaCorrectW * PWM_FULL_DUTYCYCLE);
+	pwmSetLevelGamma(COOL_LIGHT_PWM_CHANNEL, C);
+	pwmSetLevelGamma(WARM_LIGHT_PWM_CHANNEL, W);
 #endif
 }
 

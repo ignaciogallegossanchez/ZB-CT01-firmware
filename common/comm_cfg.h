@@ -50,7 +50,7 @@
  *
  * Normal mode is used by default.
  */
-#define BOOT_LOADER_MODE                    1
+#define BOOT_LOADER_MODE                    0//ZYZB010: modo normal, app monolitica en 0x0 (sin bootloader/OTA), se flashea por SWire
 
 
 
@@ -80,7 +80,7 @@
         #define CHIP_TYPE                   TLSR_8267
     #endif
 #elif defined(MCU_CORE_8258)
-        #define CHIP_TYPE                   TLSR_8258_1M//TLSR_8258_512K
+        #define CHIP_TYPE                   TLSR_8258_512K//ZYZB010: flash C8 60 13 = 512K, MAC en 0x76000
 #elif defined(MCU_CORE_8278)
         #define CHIP_TYPE                   TLSR_8278
 #elif defined(MCU_CORE_B91)

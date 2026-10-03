@@ -1,53 +1,78 @@
-# tuyaZigbee
-[![Build](https://github.com/doctor64/tuyaZigbee/actions/workflows/build.yml/badge.svg)](https://github.com/doctor64/tuyaZigbee/actions/workflows/build.yml)
+# ZB-CT01 Firmware — CCT controller with very low minimum brightness
 
-**ATTENTION!**
-Current version of firmware have a critical bug, making impossible next updates over OTA. If you don't have hardware programmer, do not install updated firmware until bug is fixed.
+Alternative Zigbee firmware for the **eWeLight / Tuya ZB-CT01** dual-white (CCT) LED
+controller — Tuya module **ZYZB010**, chip **Telink TLSR8258**.
 
-This project intended to replace firmwares in TuYa devices based on Telink TLSR82XX chips
-## Supported devices
-Currently, implemented main code for following classes of devices:
-* Lights amd LED controllers
-* Switches and buttons (not include relays and switches with relays)
-* Intruder Alarm Systems (IAS) sensors
-* More to come!
+This is a fork of **[doctor64/tuyaZigbee](https://github.com/doctor64/tuyaZigbee)**, which is
+itself built on Telink's official **tl_zigbee_sdk** (Apache License 2.0). This fork keeps the
+upstream `light` application and only adapts it to the ZB-CT01 hardware and rewrites the
+brightness curve.
 
-After main code implemented, implementing new devices of same class usually much easier - only implementation specific hardware detail need to be added.  
-List of currently implemented devices [Supported](docs/devices.md)  
-List of work in progress devices [WIP](docs/devices-wip.md)
+## Why this fork
 
-## Is my device supported?
-Theoretically speaking, any device based on Telink zigbee chips can be supported. Practically, I worked only on TLSR8258 based devices.
-You can check your device by opening it and look on board. If you see chip named TLSR8258 or tuya modules named ZT3L, ZTLC5, ZTU-IPEX, ZTU, ZT5, ZT2S, ZTC - this device theoretically can be supported.
-Or look at device in zigbee2mqtt interface. If device IEEE (MAC) address begins with 0xa4c138 - this is Telink based device.
+The stock firmware (and the generic upstream `light` app) cannot dim low: the minimum
+brightness is too high and there are no fine steps near the bottom. This fork fixes the
+hardware mapping and rewrites the dimming curve so the controller can drive a
+**BTF-Lighting FCOB 24V CCT strip** (warm + cool, e.g. RA90 3000–6000 K) all the way down to a
+**much lower, smooth minimum** — while still reaching full brightness.
 
-Unfortunately, for some devices replacement firmware can't be implemented. Mostly because some complex devices like thermostats, roller shaders openers, etc have two MCU. Telink chip used only for zigbee network operations, and some other MCU do real operations with hardware. This architecture used by many Tuya devices and allows manufacturer to put any Zigbee module or even WiFi/Bluetooth without changing hardware-related code.
+## What this changes vs. upstream
 
-List of unsupported devices [Unsupported](docs/devices-not-supported.md)
+- **Low-end dimming fix (the main goal).** Upstream clamped the minimum level to ~6 % and used
+  an integer gamma that truncated low values to zero. This fork computes the PWM duty at full
+  resolution with a measured floor (~0.075 % duty), so the strip dims smoothly down to a
+  barely-visible minimum. A channel computed as 0 is turned fully off, so the color stays clean
+  at the color-temperature extremes.
+- **Correct pin mapping for the ZB-CT01 board.** Cool = **PB5 / PWM5**, Warm = **PB4 / PWM4**
+  (verified on real hardware over SWire; the commonly-cited PC2/PC3 mapping is wrong for this
+  board). PWM runs at **6 kHz**.
+- **CCT brightness fix.** Changing brightness now updates **both** channels while keeping the
+  color temperature (upstream only updated one channel, which skewed the color when dimming).
+- **Zigbee model id `ZB-CT01`.** Zigbee2MQTT recognizes it natively as
+  **YSRSAI YSR-MINI-01_wwcw** (brightness + color temperature); no custom converter needed.
+- **Physical button on PD3.** Short press = on/off, long press (≥ 5 s) = factory reset.
+- **Build / flash configuration.** `CHIP_TYPE = TLSR_8258_512K`, `BOOT_LOADER_MODE = 0`
+  (monolithic app at `0x0`, no bootloader / no OTA). Flash at `0x0` over SWire; the factory MAC
+  at `0x76000` is preserved.
 
-## Why?
-Because TuYa firmware sucks, that's why :)  
-But, seriously, not counting common drawbacks of TuYa devices firmware like manufacturer dependent messages and overall strange approach to zigbee standart, TS050X devices have very annoying bug: sometimes, then device receive On command, it turn on light for few seconds and turned off. I was unable to find exact condition to trigger this bug, but it happens from time to time. TS0041 does not support binding, etc.  
-So, this project was born.  
-This project partially based on samples from TeLink zigbee SDK.
-This is continuation of earlier project [TuyaLight](https://github.com/doctor64/tuyaLight)
+> Note: like upstream, this build has **no OTA**. Updates are done over SWire with a hardware
+> programmer.
 
-# Compilation
-+ For Windows see: [docs/windows_build.md](docs/windows_build.md)
-+ For Linux see: [docs/linux_build.md](docs/linux_build.md)
+## Target hardware
 
-# Flashing
-See [docs/flash.md](docs/flash.md)
+- Module **ZYZB010** (Tuya), model **ZB-CT01** (eWeLight).
+- MCU **Telink TLSR8258**, 512 KB flash (JEDEC `C8 60 13`), chip id `0x5562`.
+- Pins used in normal operation: `PB4` (warm PWM), `PB5` (cool PWM), `PD3` (button).
+  `PA7`/SWS (pin 3) and RST (pin 24) are only used for flashing.
 
-# OTA update of Tuya firmware
-See [docs/ota_tuya.md](docs/ota_tuya.md)
+## Build
 
-# OTA
-See [docs/ota.md](docs/ota.md)
+Requires Docker (the Telink `tc32` toolchain is Linux-only). The Telink SDK is downloaded at
+build time and is **not** vendored in this repository.
 
-# Support & help
-If you need assistance you can check [opened issues](https://github.com/doctor64/tuyaZigbee/issues). Feel free to help with Pull Requests when you were able to fix things or add new devices or just share the love on social media.
+```sh
+docker build -f Dockerfile.tc32 -t tlsr-tc32-build .
+docker run --rm --platform linux/amd64 -v "$PWD":/work -w /work tlsr-tc32-build \
+  bash -lc 'cd /work && cmake . -B build && cmake --build build --target light.bin'
+# output: build/light/light.bin  (~197 KB)
+```
 
-Check Diskord channels 
-+ [#general](https://discord.gg/xSRjUS7Vpy)
-+ [#development](https://discord.gg/GThy6Ednx7)
+## Flash
+
+Flash `build/light/light.bin` at address `0x0` over SWire, **erasing by sector** (not a
+chip-erase) so the factory MAC at `0x76000` is preserved. Any TLSR82xx SWire programmer works.
+
+## Pairing (Zigbee2MQTT)
+
+It reports model id `ZB-CT01`, so Z2M maps it to the built-in **YSRSAI YSR-MINI-01_wwcw**
+definition (brightness + color temperature). If a stale entry for the device already exists,
+remove it and pair fresh.
+
+## Credits & license
+
+- Upstream project: **[doctor64/tuyaZigbee](https://github.com/doctor64/tuyaZigbee)**.
+- Underlying SDK: **Telink `tl_zigbee_sdk`**, © Telink Semiconductor, Apache License 2.0.
+
+Distributed under the **Apache License 2.0** (see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE)).
+Source files keep their original Telink copyright headers; modified files note the changes, as
+required by the license.

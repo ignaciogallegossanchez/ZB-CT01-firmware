@@ -43,9 +43,9 @@ extern "C" {
 /* HCI interface */
 #define	ZBHCI_UART						0
 
-/* RGB or CCT */
-//#define COLOR_RGB_SUPPORT				0
-//#define COLOR_CCT_SUPPORT				0
+/* RGB or CCT -- el ZYZB010 es CCT (blanco frio + calido), sin RGB */
+#define COLOR_RGB_SUPPORT				0
+#define COLOR_CCT_SUPPORT				1
 
 /* BDB */
 #define TOUCHLINK_SUPPORT				1

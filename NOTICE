@@ -1,0 +1,26 @@
+ZB-CT01 Firmware
+Alternative CCT firmware for the eWeLight / Tuya ZB-CT01 (module ZYZB010, Telink TLSR8258).
+
+This product is a fork of:
+  doctor64/tuyaZigbee — https://github.com/doctor64/tuyaZigbee
+
+and is built on:
+  Telink tl_zigbee_sdk
+  Copyright (c) Telink Semiconductor (Shanghai) Co., Ltd.
+  Licensed under the Apache License, Version 2.0.
+
+All original copyright and license headers in the source files are retained.
+
+Modifications in this fork (over doctor64/tuyaZigbee), in the `light` application and
+device configuration, licensed under the Apache License, Version 2.0:
+  - Rewrote the brightness curve (full-resolution gamma with a measured low-end floor,
+    per-channel off at zero) to lower the usable minimum brightness.
+  - Corrected the CCT pin/channel mapping for the ZB-CT01 board (cool = PB5/PWM5,
+    warm = PB4/PWM4) and set the PWM frequency to 6 kHz.
+  - Made brightness changes update both CCT channels while preserving color temperature.
+  - Set the Zigbee model id to "ZB-CT01" for native Zigbee2MQTT support.
+  - Mapped the physical button on PD3 (short press on/off, long press factory reset).
+  - Configured a monolithic 512 KB build (CHIP_TYPE TLSR_8258_512K, BOOT_LOADER_MODE 0)
+    flashed at 0x0 over SWire, preserving the factory MAC at 0x76000.
+
+See README.md for details.

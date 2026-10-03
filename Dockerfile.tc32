@@ -1,0 +1,7 @@
+# Entorno Linux (amd64) para compilar firmware Telink TLSR8258 con el toolchain tc32.
+FROM --platform=linux/amd64 ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake make gcc g++ git wget curl unzip bzip2 tar xz-utils python3 ca-certificates file \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /work

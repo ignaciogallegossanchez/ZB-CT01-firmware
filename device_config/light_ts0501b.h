@@ -36,7 +36,7 @@ extern "C" {
 #define USB_PRINTF_MODE         		0
 //#define BAUDRATE 						1000000//1M
 
-#define ZCL_BASIC_MODEL_ID          {13,'F','i','x','e','d','_','T','S','0','5','0','1','B'} //TS0501B - CW
+#define ZCL_BASIC_MODEL_ID          {7,'Z','B','-','C','T','0','1'} //Z2M lo reconoce por zigbeeModel "ZB-CT01" como YSRSAI YSR-MINI-01_wwcw (CCT), soportado nativo, sin converter
 
 #define HARDWARE_REV                0x01
 
@@ -48,11 +48,11 @@ extern "C" {
 #endif
 
 // BUTTON
-#define BUTTON1               GPIO_PC0
-#define PC0_FUNC			  AS_GPIO
-#define PC0_OUTPUT_ENABLE	  0
-#define PC0_INPUT_ENABLE	  1
-#define	PULL_WAKEUP_SRC_PC0	  PM_PIN_PULLUP_10K
+#define BUTTON1               GPIO_PD3	//boton fisico del ZYZB010 (pin 5), activo-bajo; pull-up interno necesario
+#define PD3_FUNC			  AS_GPIO
+#define PD3_OUTPUT_ENABLE	  0
+#define PD3_INPUT_ENABLE	  1
+#define	PULL_WAKEUP_SRC_PD3	  PM_PIN_PULLUP_10K
 #define HAVE_NET_BUTTON             1
 
 #define BUTTON2               GPIO_PD4
@@ -70,14 +70,15 @@ extern "C" {
 * LED_WW        GPIO_PC2    //C2 -  warm white      PWM0 mux 4
 ****************************************************************/
 
-//#warning("Tuya CW/CCT support")
-//PWM configuration, LED_WW as warm light, LED_CW as cool light or single LED.
-#define LED_WW						GPIO_PC2	//C2 warm white     PWM0
-#define LED_CW						GPIO_PB5	//B5 cool white		PWM5
+// Pines del modulo ZYZB010 (eWeLight ZB-CT01), VERIFICADOS por SWire en el HW:
+// calido = PB4/PWM4, frio = PB5/PWM5. Anodo comun (lado bajo). Salidas a la tira
+// etiquetadas V+/B/G. El pinout PC2/PC3 anterior (blakadder) era erroneo.
+#define LED_WW						GPIO_PB4	//B4 warm white     PWM4
+#define LED_CW						GPIO_PB5	//B5 cool white     PWM5
 
-#define PWM_WW_CHANNEL				0//PWM0
+#define PWM_WW_CHANNEL				4//PWM4
 #define PWM_WW_CHANNEL_SET()		do{	\
-										gpio_set_func(LED_WW, AS_PWM0); 		\
+										gpio_set_func(LED_WW, AS_PWM4); 		\
 									}while(0)
 
 #define PWM_CW_CHANNEL				5//PWM5
@@ -90,25 +91,24 @@ extern "C" {
 #define WARM_LIGHT_PWM_SET()		PWM_WW_CHANNEL_SET()
 #define COOL_LIGHT_PWM_SET()		PWM_CW_CHANNEL_SET()
 
-//LED_R and LED_G as GPIO.
-#define LED_R						GPIO_PB4
-#define LED_G						GPIO_PC3
-#define LED_B						GPIO_PD2
+// RGB del modulo ZYZB010 (sin usar en CCT, pero definidos sin chocar con C2/C3).
+#define LED_R						GPIO_PC4	//C4 red   PWM3 (ZYZB010 pin 14)
+#define LED_G						GPIO_PB4	//B4 green PWM4 (ZYZB010 pin 16)
+#define LED_B						GPIO_PB5	//B5 blue  PWM5 (ZYZB010 pin 17)
 
-#define PWM_R_CHANNEL               4//PWM4
+#define PWM_R_CHANNEL               3//PWM3
 #define PWM_R_CHANNEL_SET()         do{ \
-                                        gpio_set_func(LED_R, AS_PWM4);      \
+                                        gpio_set_func(LED_R, AS_PWM3);      \
                                     }while(0)
 
-#define PWM_G_CHANNEL               1//PWM1
+#define PWM_G_CHANNEL               4//PWM4
 #define PWM_G_CHANNEL_SET()         do{ \
-                                        gpio_set_func(LED_G, AS_PWM1);  \
-                                        /* drv_pwm_n_invert(PWM_G_CHANNEL);*/   \
+                                        gpio_set_func(LED_G, AS_PWM4);  \
                                     }while(0)
 
-#define PWM_B_CHANNEL               3//PWM3
+#define PWM_B_CHANNEL               5//PWM5
 #define PWM_B_CHANNEL_SET()         do{ \
-                                        gpio_set_func(LED_B, AS_PWM3);      \
+                                        gpio_set_func(LED_B, AS_PWM5);      \
                                     }while(0)
 
 #define R_LIGHT_PWM_CHANNEL         PWM_R_CHANNEL
