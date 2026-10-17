@@ -62,6 +62,19 @@ docker run --rm --platform linux/amd64 -v "$PWD":/work -w /work tlsr-tc32-build 
 Flash `build/light/light.bin` at address `0x0` over SWire, **erasing by sector** (not a
 chip-erase) so the factory MAC at `0x76000` is preserved. Any TLSR82xx SWire programmer works.
 
+**When flashing over the stock firmware, also erase the NV area.** The stock firmware uses the
+same Telink NV format, so this build loads its saved state (old network, light off): the light
+stays dark, never searches for a network and the button does nothing. Erase these sectors once
+(MAC at `0x76000` and calibration at `0x77000` are outside them):
+
+| Range | Content |
+|---|---|
+| `0x34000`–`0x3FFFF` | NV modules 0-5 |
+| `0x79000`–`0x79FFF` | factory-reset flag |
+| `0x7A000`–`0x7FFFF` | NV modules 6+ |
+
+On first boot after that, the light turns on (warm white) and starts looking for a network.
+
 ## Pairing (Zigbee2MQTT)
 
 It reports model id `ZB-CT01`, so Z2M maps it to the built-in **YSRSAI YSR-MINI-01_wwcw**
