@@ -160,12 +160,21 @@ static void tuyaLight_zclWriteReqCmd(u16 clusterId, zclWriteCmd_t *pWriteReqCmd)
 	u8 numAttr = pWriteReqCmd->numAttr;
 	zclWriteRec_t *attr = pWriteReqCmd->attrList;
 
-	if(clusterId == ZCL_CLUSTER_GEN_ON_OFF){
-		for(u8 i = 0; i < numAttr; i++){
-			if(attr[i].attrID == ZCL_ATTRID_START_UP_ONOFF){
-				zcl_onOffAttr_save();
-			}
+	// los atributos de arranque se guardan al momento: si no, se pierden con un corte antes del siguiente cambio de la luz
+	for(u8 i = 0; i < numAttr; i++){
+		if((clusterId == ZCL_CLUSTER_GEN_ON_OFF) && (attr[i].attrID == ZCL_ATTRID_START_UP_ONOFF)){
+			zcl_onOffAttr_save();
 		}
+#ifdef ZCL_LEVEL_CTRL
+		if((clusterId == ZCL_CLUSTER_GEN_LEVEL_CONTROL) && (attr[i].attrID == ZCL_ATTRID_LEVEL_START_UP_CURRENT_LEVEL)){
+			zcl_levelAttr_save();
+		}
+#endif
+#ifdef ZCL_LIGHT_COLOR_CONTROL
+		if((clusterId == ZCL_CLUSTER_LIGHTING_COLOR_CONTROL) && (attr[i].attrID == ZCL_ATTRID_START_UP_COLOR_TEMPERATURE_MIREDS)){
+			zcl_colorCtrlAttr_save();
+		}
+#endif
 	}
 }
 
@@ -269,9 +278,9 @@ static void tuyaLight_zclReportCmd(zclReportCmd_t *pReportCmd)
  */
 status_t tuyaLight_basicCb(zclIncomingAddrInfo_t *pAddrInfo, u8 cmdId, void *cmdPayload)
 {
+	// solo la configuracion; segun ZCL este comando no saca el aparato de la red
 	if(cmdId == ZCL_CMD_BASIC_RESET_FAC_DEFAULT){
-		//Reset all the attributes of all its clusters to factory defaults
-		//zcl_nv_attr_reset();
+		zcl_tuyaLightStartUpAttrsReset();
 	}
 
 	return ZCL_STA_SUCCESS;
@@ -318,7 +327,8 @@ void tuyaLight_zclIdentifyCmdHandler(u8 endpoint, u16 srcAddr, u16 identifyTime)
 		light_blink_stop();
 	}else{
 		if(!identifyTimerEvt){
-			light_blink_start(identifyTime, 500, 500);
+			// 0 = parpadeo sin limite; lo para el temporizador de identify (identifyTime puede pasar de 255)
+			light_blink_start(0, 500, 500);
 			identifyTimerEvt = TL_ZB_TIMER_SCHEDULE(tuyaLight_zclIdentifyTimerCb, NULL, 1000);
 		}
 	}

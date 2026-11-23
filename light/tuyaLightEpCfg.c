@@ -43,6 +43,11 @@
 #if COLOR_CCT_SUPPORT
 #define COLOR_TEMPERATURE_PHYSICAL_MIN	0x00FA//4000K
 #define COLOR_TEMPERATURE_PHYSICAL_MAX	0x01C6//2200K
+
+// valores de fabrica de los atributos de arranque (tambien para Basic "reset to factory defaults")
+#define DEFAULT_START_UP_ONOFF				ZCL_START_UP_ONOFF_SET_ONOFF_TO_OFF
+#define DEFAULT_START_UP_CURRENT_LEVEL		ZCL_START_UP_CURRENT_LEVEL_TO_PREVIOUS
+#define DEFAULT_START_UP_COLOR_TEMPERATURE	ZCL_START_UP_COLOR_TEMPERATURE_MIREDS_TO_PREVIOUS
 #endif
 
 /**********************************************************************
@@ -274,7 +279,7 @@ zcl_onOffAttr_t g_zcl_onOffAttrs =
 	.globalSceneControl	= 1,
 	.onTime				= 0x0000,
 	.offWaitTime		= 0x0000,
-	.startUpOnOff 		= ZCL_START_UP_ONOFF_SET_ONOFF_TO_OFF,
+	.startUpOnOff 		= DEFAULT_START_UP_ONOFF,
 };
 
 const zclAttrInfo_t onOff_attrTbl[] =
@@ -297,7 +302,7 @@ zcl_levelAttr_t g_zcl_levelAttrs =
 {
 	.curLevel				= 0xFE,
 	.remainingTime			= 0,
-	.startUpCurrentLevel 	= ZCL_START_UP_CURRENT_LEVEL_TO_PREVIOUS,
+	.startUpCurrentLevel 	= DEFAULT_START_UP_CURRENT_LEVEL,
 };
 
 const zclAttrInfo_t level_attrTbl[] =
@@ -333,7 +338,7 @@ zcl_lightColorCtrlAttr_t g_zcl_colorCtrlAttrs =
 	.colorTemperatureMireds			= COLOR_TEMPERATURE_PHYSICAL_MAX,
 	.colorTempPhysicalMinMireds		= COLOR_TEMPERATURE_PHYSICAL_MIN,
 	.colorTempPhysicalMaxMireds 	= COLOR_TEMPERATURE_PHYSICAL_MAX,
-	.startUpColorTemperatureMireds 	= ZCL_START_UP_COLOR_TEMPERATURE_MIREDS_TO_PREVIOUS,
+	.startUpColorTemperatureMireds 	= DEFAULT_START_UP_COLOR_TEMPERATURE,
 #endif
 };
 
@@ -655,6 +660,31 @@ void zcl_tuyaLightAttrsInit(void)
 	zcl_onOffAttr_restore();
 	zcl_levelAttr_restore();
 	zcl_colorCtrlAttr_restore();
+}
+
+/*********************************************************************
+ * @fn      zcl_tuyaLightStartUpAttrsReset
+ *
+ * @brief   Vuelve los atributos de arranque a sus valores de fabrica y los guarda.
+ *
+ * @param   None
+ *
+ * @return  None
+ */
+void zcl_tuyaLightStartUpAttrsReset(void)
+{
+#ifdef ZCL_ON_OFF
+	g_zcl_onOffAttrs.startUpOnOff = DEFAULT_START_UP_ONOFF;
+	zcl_onOffAttr_save();
+#endif
+#ifdef ZCL_LEVEL_CTRL
+	g_zcl_levelAttrs.startUpCurrentLevel = DEFAULT_START_UP_CURRENT_LEVEL;
+	zcl_levelAttr_save();
+#endif
+#if defined(ZCL_LIGHT_COLOR_CONTROL) && COLOR_CCT_SUPPORT
+	g_zcl_colorCtrlAttrs.startUpColorTemperatureMireds = DEFAULT_START_UP_COLOR_TEMPERATURE;
+	zcl_colorCtrlAttr_save();
+#endif
 }
 
 #endif	/* __PROJECT_TL_DIMMABLE_LIGHT__ */

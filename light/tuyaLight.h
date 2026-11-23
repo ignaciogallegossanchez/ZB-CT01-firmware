@@ -227,6 +227,7 @@ void tuyaLight_onoff(u8 cmd);
 void tuyaLight_levelStopFadeToOff(void);
 
 void zcl_tuyaLightAttrsInit(void);
+void zcl_tuyaLightStartUpAttrsReset(void);
 nv_sts_t zcl_onOffAttr_save(void);
 nv_sts_t zcl_levelAttr_save(void);
 nv_sts_t zcl_colorCtrlAttr_save(void);
