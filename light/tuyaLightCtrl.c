@@ -535,11 +535,8 @@ s32 light_blink_TimerEvtCb(void *arg)
 		if(gLightCtx.times){
 			gLightCtx.times--;
 			if(gLightCtx.times <= 0){
-				if(gLightCtx.oriSta){
-					hwLight_onOffUpdate(ZCL_CMD_ONOFF_ON);
-				}else{
-					hwLight_onOffUpdate(ZCL_CMD_ONOFF_OFF);
-				}
+				// el estado pudo cambiar durante el parpadeo: se aplica el atributo actual
+				tuyaLight_updateOnOff();
 
 				gLightCtx.timerLedEvt = NULL;
 				return -1;
@@ -610,11 +607,7 @@ void light_blink_stop(void)
 		TL_ZB_TIMER_CANCEL(&gLightCtx.timerLedEvt);
 
 		gLightCtx.times = 0;
-		if(gLightCtx.oriSta){
-			hwLight_onOffUpdate(ZCL_CMD_ONOFF_ON);
-		}else{
-			hwLight_onOffUpdate(ZCL_CMD_ONOFF_OFF);
-		}
+		tuyaLight_updateOnOff();
 	}
 }
 
