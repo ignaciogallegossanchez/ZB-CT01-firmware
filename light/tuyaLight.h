@@ -224,6 +224,7 @@ void tuyaLight_otaProcessMsgHandler(u8 evt, u8 status);
 bool tuyaLight_nwkUpdateIndicateHandler(nwkCmd_nwkUpdate_t *pNwkUpdate);
 
 void tuyaLight_onoff(u8 cmd);
+void tuyaLight_levelStopFadeToOff(void);
 
 void zcl_tuyaLightAttrsInit(void);
 nv_sts_t zcl_onOffAttr_save(void);

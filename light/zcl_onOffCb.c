@@ -257,6 +257,9 @@ status_t tuyaLight_onOffCb(zclIncomingAddrInfo_t *pAddrInfo, u8 cmdId, void *cmd
 	zcl_onOffAttr_t *pOnOff = zcl_onoffAttrGet();
 
 	if(pAddrInfo->dstEp == TUYA_LIGHT_ENDPOINT){
+#ifdef ZCL_LEVEL_CTRL
+		tuyaLight_levelStopFadeToOff();
+#endif
 		switch(cmdId){
 			case ZCL_CMD_ONOFF_ON:
 			case ZCL_CMD_ONOFF_OFF:
