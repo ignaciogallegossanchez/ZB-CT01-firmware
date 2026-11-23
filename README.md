@@ -26,17 +26,21 @@ hardware mapping and rewrites the dimming curve so the controller can drive a
 - **Correct pin mapping for the ZB-CT01 board.** Cool = **PB5 / PWM5**, Warm = **PB4 / PWM4**
   (verified on real hardware over SWire; the commonly-cited PC2/PC3 mapping is wrong for this
   board). PWM runs at **6 kHz**.
-- **CCT brightness fix.** Changing brightness now updates **both** channels while keeping the
-  color temperature (upstream only updated one channel, which skewed the color when dimming).
+- **CCT mixing.** The level sets the total light and the color temperature only splits it
+  between the warm and cool channels, so moving the color temperature does not change the
+  brightness and the lowest levels keep their color.
 - **Zigbee model id `ZB-CT01`.** Zigbee2MQTT recognizes it natively as
   **YSRSAI YSR-MINI-01_wwcw** (brightness + color temperature); no custom converter needed.
-- **Physical button on PD3.** Short press = on/off, long press (≥ 5 s) = factory reset.
+- **Physical button on PD3.** Short press (on release) = toggle, also without a network; long
+  press (≥ 5 s) = factory reset.
+- **After a power cut the light stays off** by default (`startUpOnOff`, changeable from
+  Zigbee2MQTT). Resets that are not a power cut (watchdog, exception, OTA) keep the state.
+- **Zigbee behaviour fixes** in the Telink sample code: brightness "with On/Off" commands,
+  transitions that stopped short, scene recall, identify, rejoin retries, default reporting of
+  level and color temperature, watchdog enabled. See the git history for details.
 - **Build / flash configuration.** `CHIP_TYPE = TLSR_8258_512K`, `BOOT_LOADER_MODE = 0`
-  (monolithic app at `0x0`, no bootloader / no OTA). Flash at `0x0` over SWire; the factory MAC
-  at `0x76000` is preserved.
-
-> Note: like upstream, this build has **no OTA**. Updates are done over SWire with a hardware
-> programmer.
+  (app at `0x0`, no bootloader). Flash at `0x0` over SWire; the factory MAC at `0x76000` is
+  preserved. The build fails if the image does not fit before the NV area (`0x34000`).
 
 ## Target hardware
 
@@ -53,9 +57,11 @@ build time and is **not** vendored in this repository.
 ```sh
 docker build -f Dockerfile.tc32 -t tlsr-tc32-build .
 docker run --rm --platform linux/amd64 -v "$PWD":/work -w /work tlsr-tc32-build \
-  bash -lc 'cd /work && cmake . -B build && cmake --build build --target light.bin'
-# output: build/light/light.bin  (~197 KB)
+  bash -lc 'cd /work && cmake . -B build && cmake --build build --target light.zigbee'
+# output: build/light/light.bin (SWire) and build/light/6464-0211-<version>-light.zigbee (OTA)
 ```
+
+The version is `APP_RELEASE` / `APP_BUILD` in `common/version.h`; raise it for every OTA image.
 
 ## Flash
 
@@ -73,7 +79,20 @@ stays dark, never searches for a network and the button does nothing. Erase thes
 | `0x79000`–`0x79FFF` | factory-reset flag |
 | `0x7A000`–`0x7FFFF` | NV modules 6+ |
 
-On first boot after that, the light turns on (warm white) and starts looking for a network.
+On first boot after that, the light stays off and starts looking for a network; the button
+turns it on.
+
+## OTA update
+
+The firmware includes the Zigbee OTA client (manufacturer `0x6464`, image type `0x0211`). Without
+a bootloader, Telink downloads the new image to `0x40000` and boots from there; the next update
+goes back to `0x0`. Both slots hold up to 208 KB.
+
+Serve the `.zigbee` file from Zigbee2MQTT with a local OTA index and start the update from the
+device's OTA tab. The device asks for updates every 6 hours, or when Z2M checks.
+
+> After an OTA the running image may be at `0x40000`. To go back to SWire flashing at `0x0`,
+> erase `0x40000`–`0x73FFF` as well, or the chip may keep booting the image there.
 
 ## Pairing (Zigbee2MQTT)
 
