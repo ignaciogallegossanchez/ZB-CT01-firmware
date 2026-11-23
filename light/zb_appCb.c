@@ -41,6 +41,9 @@
  */
 #define DEBUG_HEART		0
 
+#define REJOIN_RETRY_MIN_SEC	5
+#define REJOIN_RETRY_MAX_SEC	60
+
 /**********************************************************************
  * TYPEDEFS
  */
@@ -71,6 +74,10 @@ ota_callBack_t tuyaLight_otaCb =
  */
 u32 heartInterval = 0;
 
+static bool wasJoined = FALSE;
+static u8 rejoinRetrySec = 0;
+static ev_timer_event_t *rejoinTimerEvt = NULL;
+
 #if DEBUG_HEART
 ev_timer_event_t *heartTimerEvt = NULL;
 #endif
@@ -93,6 +100,13 @@ static s32 heartTimerCb(void *arg){
 
 s32 tuyaLight_bdbNetworkSteerStart(void *arg){
 	bdb_networkSteerStart();
+
+	return -1;
+}
+
+static s32 tuyaLight_rejoinRetry(void *arg){
+	rejoinTimerEvt = NULL;
+	zb_rejoinReq(zb_apsChannelMaskGet(), g_bdbAttrs.scanDuration);
 
 	return -1;
 }
@@ -125,6 +139,7 @@ void zbdemo_bdbInitCb(u8 status, u8 joinedNetwork){
 		 * */
 		if(joinedNetwork){
 			heartInterval = 1000;
+			wasJoined = TRUE;
 
 #ifdef ZCL_OTA
 			ota_queryStart(MY_OTA_PERIODIC_QUERY_INTERVAL);
@@ -169,8 +184,13 @@ void zbdemo_bdbCommissioningCb(u8 status, void *arg){
 	switch(status){
 		case BDB_COMMISSION_STA_SUCCESS:
 			heartInterval = 1000;
+			rejoinRetrySec = 0;
 
-			light_blink_start(2, 200, 200);
+			// el aviso es para la union nueva; en los rejoin de la pila no se parpadea
+			if(!wasJoined){
+				wasJoined = TRUE;
+				light_blink_start(2, 200, 200);
+			}
 
 #ifdef ZCL_OTA
 	    	ota_queryStart(OTA_PERIODIC_QUERY_INTERVAL);
@@ -209,7 +229,11 @@ void zbdemo_bdbCommissioningCb(u8 status, void *arg){
 		case BDB_COMMISSION_STA_NOT_PERMITTED:
 			break;
 		case BDB_COMMISSION_STA_REJOIN_FAILURE:
-			zb_rejoinReq(zb_apsChannelMaskGet(), g_bdbAttrs.scanDuration);
+			// sin la red (coordinador apagado) no se barre la radio sin parar: 5 s, 10 s... hasta 60 s
+			if(!rejoinTimerEvt){
+				rejoinRetrySec = (rejoinRetrySec == 0) ? REJOIN_RETRY_MIN_SEC : min2(rejoinRetrySec * 2, REJOIN_RETRY_MAX_SEC);
+				rejoinTimerEvt = TL_ZB_TIMER_SCHEDULE(tuyaLight_rejoinRetry, NULL, (u32)rejoinRetrySec * 1000);
+			}
 			break;
 		case BDB_COMMISSION_STA_FORMATION_DONE:
 #ifndef ZBHCI_EN
