@@ -49,6 +49,9 @@
 /**********************************************************************
  * LOCAL CONSTANTS
  */
+// registro analogico que solo se borra al quitar la corriente: distingue un corte de un reinicio
+#define WARM_BOOT_ANA_REG		DEEP_ANA_REG1
+#define WARM_BOOT_MAGIC			0xA5
 
 
 /**********************************************************************
@@ -170,6 +173,13 @@ void user_app_init(void)
 
 	/* Register ZCL specific cluster information */
 	zcl_register(TUYA_LIGHT_ENDPOINT, TUYALIGHT_CB_CLUSTER_NUM, (zcl_specClusterInfo_t *)g_tuyaLightClusterList);
+
+	/* zcl_register aplica startUp*, que solo tiene sentido al volver la corriente: tras
+	 * un reinicio (excepcion, watchdog, OTA) se vuelve al estado guardado */
+	if(analog_read(WARM_BOOT_ANA_REG) == WARM_BOOT_MAGIC){
+		zcl_tuyaLightAttrsInit();
+	}
+	analog_write(WARM_BOOT_ANA_REG, WARM_BOOT_MAGIC);
 
 #if ZCL_GP_SUPPORT
 	/* Initialize GP */
