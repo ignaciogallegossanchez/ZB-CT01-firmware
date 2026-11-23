@@ -89,14 +89,8 @@ void buttonKeepPressed(u8 btNum){
 
 void buttonShortPressed(u8 btNum){
 	if(btNum == VK_SW1){
-		if(zb_isDeviceJoinedNwk()){
-			gLightCtx.sta = !gLightCtx.sta;
-			if(gLightCtx.sta){
-				tuyaLight_onoff(ZCL_ONOFF_STATUS_ON);
-			}else{
-				tuyaLight_onoff(ZCL_ONOFF_STATUS_OFF);
-			}
-		}
+		tuyaLight_levelStopFadeToOff();
+		tuyaLight_onoff(ZCL_CMD_ONOFF_TOGGLE);
 	}else if(btNum == VK_SW2){
 		/* toggle local permit Joining */
 		u8 duration = zb_getMacAssocPermit() ? 0 : 180;
@@ -111,16 +105,20 @@ void keyScan_keyPressedCB(kb_data_t *kbEvt){
 	u8 keyCode = kbEvt->keycode[0];
 //	static u8 lastKeyCode = 0xff;
 
-	buttonShortPressed(keyCode);
-
+	// SW1 actua al soltar, para que la pulsacion larga de reset no cambie la luz
 	if(keyCode == VK_SW1){
 		gLightCtx.keyPressedTime = clock_time();
 		gLightCtx.state = APP_FACTORY_NEW_SET_CHECK;
+	}else{
+		buttonShortPressed(keyCode);
 	}
 }
 
 
 void keyScan_keyReleasedCB(u8 keyCode){
+	if((keyCode == VK_SW1) && (gLightCtx.state == APP_FACTORY_NEW_SET_CHECK)){
+		buttonShortPressed(keyCode);
+	}
 	gLightCtx.state = APP_STATE_NORMAL;
 }
 
