@@ -274,7 +274,7 @@ zcl_onOffAttr_t g_zcl_onOffAttrs =
 	.globalSceneControl	= 1,
 	.onTime				= 0x0000,
 	.offWaitTime		= 0x0000,
-	.startUpOnOff 		= ZCL_START_UP_ONOFF_SET_ONOFF_TO_ON,
+	.startUpOnOff 		= ZCL_START_UP_ONOFF_SET_ONOFF_TO_OFF,
 };
 
 const zclAttrInfo_t onOff_attrTbl[] =
