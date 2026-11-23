@@ -132,6 +132,13 @@ void app_key_handler(void){
 		}
 	}
 
+	// kb_scan_key filtra el rebote comparando lecturas seguidas: espaciarlas 10 ms hace que el filtro cubra el rebote real
+	static u32 lastScanTick = 0;
+	if(!clock_time_exceed(lastScanTick, 10*1000)){
+		return;
+	}
+	lastScanTick = clock_time();
+
 	if(kb_scan_key(0 , 1)){
 		T_keyPressedNum++;
 		if(kb_event.cnt){
