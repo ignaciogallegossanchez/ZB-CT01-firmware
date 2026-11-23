@@ -208,4 +208,7 @@ TARGET_LINK_LIBRARIES(${TARGET}
 )
 
 ADD_BIN_TARGET(${TARGET} ${PROJECT_SOURCE_DIR}/tools)
+# la app va de 0x0 a la NV (0x34000 en 512K sin bootloader, drv_nv.h); la imagen OTA tiene el mismo limite
+ADD_CUSTOM_COMMAND(TARGET ${TARGET}.bin POST_BUILD
+	COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/check_fw_size.py $<TARGET_FILE:${TARGET}>.bin 0x34000)
 ADD_OTA_TARGET(${TARGET} ${PROJECT_SOURCE_DIR}/tools)
