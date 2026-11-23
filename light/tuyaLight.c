@@ -322,6 +322,16 @@ void user_init(bool isRetention)
     bdb_defaultReportingCfg(TUYA_LIGHT_ENDPOINT, HA_PROFILE_ID, ZCL_CLUSTER_GEN_ON_OFF, ZCL_ATTRID_ONOFF,
     						0x0000, 0x003c, (u8 *)&reportableChange);
 
+    /* nivel y temperatura: como mucho uno por segundo, para no inundar la red en las transiciones */
+    u8 levelChange = 1;
+    bdb_defaultReportingCfg(TUYA_LIGHT_ENDPOINT, HA_PROFILE_ID, ZCL_CLUSTER_GEN_LEVEL_CONTROL, ZCL_ATTRID_LEVEL_CURRENT_LEVEL,
+    						0x0001, 0x003c, (u8 *)&levelChange);
+#if defined(ZCL_LIGHT_COLOR_CONTROL) && COLOR_CCT_SUPPORT
+    u16 colorTempChange = 1;
+    bdb_defaultReportingCfg(TUYA_LIGHT_ENDPOINT, HA_PROFILE_ID, ZCL_CLUSTER_LIGHTING_COLOR_CONTROL, ZCL_ATTRID_COLOR_TEMPERATURE_MIREDS,
+    						0x0001, 0x003c, (u8 *)&colorTempChange);
+#endif
+
     /* Initialize BDB */
 	bdb_init((af_simple_descriptor_t *)&tuyaLight_simpleDesc, &g_bdbCommissionSetting, &g_zbDemoBdbCb, 1);
 }
