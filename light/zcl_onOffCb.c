@@ -238,7 +238,8 @@ static void tuyaLight_onoff_offWithEffectProcess(zcl_onoff_offWithEffectCmd_t *c
  */
 static void tuyaLight_onoff_onWithRecallGlobalSceneProcess(void)
 {
-
+	// la escena global no se guarda: se recupera el ultimo nivel y color, que no cambian al apagar
+	tuyaLight_onoff(ZCL_CMD_ONOFF_ON);
 }
 
 /*********************************************************************
