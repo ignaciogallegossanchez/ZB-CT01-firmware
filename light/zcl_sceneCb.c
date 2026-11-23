@@ -35,70 +35,138 @@
 #include "tuyaLight.h"
 
 
+#if defined(ZCL_LIGHT_COLOR_CONTROL) && COLOR_CCT_SUPPORT
+/*********************************************************************
+ * @fn      tuyaLight_sceneColorTemperature
+ *
+ * @brief   Temperatura de color de un bloque de escena del cluster de color:
+ *          - len >= 13: formato ZCL, ColorTemperatureMireds en los bytes 11-12.
+ *          - len 2: formato de tuyaLight_sceneStoreReqHandler (solo mireds).
+ *          - len >= 4: solo X/Y, como lo manda Zigbee2MQTT en scene_add;
+ *            se pasa a mireds con la aproximacion de McCamy.
+ *
+ * @param   pData	-	datos del bloque
+ * @param   len		-	longitud de los datos
+ *
+ * @return  mireds, o 0 si el bloque no trae una temperatura valida
+ */
+static u16 tuyaLight_sceneColorTemperature(const u8 *pData, u8 len)
+{
+	if(len >= 13){
+		u16 mireds = BUILD_U16(pData[11], pData[12]);
+		if(mireds){
+			return mireds;
+		}
+	}else if(len == 2){
+		return BUILD_U16(pData[0], pData[1]);
+	}
+
+	if(len < 4){
+		return 0;
+	}
+
+	u16 rawX = BUILD_U16(pData[0], pData[1]);
+	u16 rawY = BUILD_U16(pData[2], pData[3]);
+	if((rawX == 0) && (rawY == 0)){
+		return 0;
+	}
+
+	// sin coma flotante en el toolchain: x, y en diezmilesimas y n en milesimas
+	s32 x = ((s32)rawX * 10000) / 65535;
+	s32 y = ((s32)rawY * 10000) / 65535;
+	s32 den = 1858 - y;
+	if(den == 0){
+		return 0;
+	}
+	s32 n = ((x - 3320) * 1000) / den;
+	if((n < -2000) || (n > 2000)){
+		return 0;
+	}
+
+	s32 kelvin = (437 * n) / 1000 + 3601;
+	kelvin = (kelvin * n) / 1000 + 6861;
+	kelvin = (kelvin * n) / 1000 + 5517;
+	if((kelvin <= 1000) || (kelvin >= 20000)){
+		return 0;
+	}
+
+	return (u16)(1000000 / kelvin);
+}
+#endif
+
 /*********************************************************************
  * @fn      tuyaLight_sceneRecallReqHandler
  *
- * @brief   Handler for ZCL scene recall command. This function will recall scene.
+ * @brief   Aplica una escena. El campo de extension es una lista de bloques
+ *          {clusterId (2), len (1), datos (len)} en cualquier orden; solo se
+ *          aplica lo que trae la escena.
  *
- * @param	pApsdeInd
+ * @param	pAddrInfo
  * @param	pScene
  *
  * @return  None
  */
 static void tuyaLight_sceneRecallReqHandler(zclIncomingAddrInfo_t *pAddrInfo, zcl_sceneEntry_t *pScene)
 {
-	u8 extLen = 0;
+	// la escena guarda segundos + decimas; las ordenes de nivel y color usan decimas
+	u32 transitionTime = (u32)pScene->transTime * 10 + pScene->transTime100ms;
+	if(transitionTime > 0xFFFE){
+		transitionTime = 0xFFFE;
+	}
 
+	const u8 *pField = pScene->extField;
+	const u8 *pEnd = pScene->extField + pScene->extFieldLen;
+
+	while(pField + 3 <= pEnd){
+		u16 clusterId = BUILD_U16(pField[0], pField[1]);
+		u8 len = pField[2];
+		const u8 *pData = pField + 3;
+
+		if(pData + len > pEnd){
+			break;
+		}
+
+		switch(clusterId){
 #ifdef ZCL_ON_OFF
-	zcl_onOffAttr_t *pOnOff = zcl_onoffAttrGet();
-
-	pOnOff->onOff = pScene->extField[extLen+3];
-	extLen += 4;
+			case ZCL_CLUSTER_GEN_ON_OFF:
+				if(len >= 1){
+					tuyaLight_onoff(pData[0] ? ZCL_CMD_ONOFF_ON : ZCL_CMD_ONOFF_OFF);
+				}
+				break;
 #endif
-
 #ifdef ZCL_LEVEL_CTRL
-	u8 level = pScene->extField[extLen+3];
-	extLen += 4;
-#endif
+			case ZCL_CLUSTER_GEN_LEVEL_CONTROL:
+				if(len >= 1){
+					moveToLvl_t moveToLevel;
+					moveToLevel.level = pData[0];
+					moveToLevel.transitionTime = (u16)transitionTime;
+					moveToLevel.optPresent = 0;
 
-#ifdef ZCL_LIGHT_COLOR_CONTROL
-#if COLOR_RGB_SUPPORT
-	u8 hue = pScene->extField[extLen+3];
-	u8 saturation = pScene->extField[extLen+4];
-	extLen += 5;
-#elif COLOR_CCT_SUPPORT
-	u16 colorTemperatureMireds = BUILD_U16(pScene->extField[extLen+3], pScene->extField[extLen+4]);
-	extLen += 5;
+					tuyaLight_levelCb(pAddrInfo, ZCL_CMD_LEVEL_MOVE_TO_LEVEL, &moveToLevel);
+				}
+				break;
 #endif
+#if defined(ZCL_LIGHT_COLOR_CONTROL) && COLOR_CCT_SUPPORT
+			case ZCL_CLUSTER_LIGHTING_COLOR_CONTROL:
+			{
+				u16 mireds = tuyaLight_sceneColorTemperature(pData, len);
+				if(mireds){
+					zcl_colorCtrlMoveToColorTemperatureCmd_t move2ColorTemp;
+					move2ColorTemp.colorTemperature = mireds;
+					move2ColorTemp.transitionTime = (u16)transitionTime;
+					move2ColorTemp.optPresent = 0;
+
+					tuyaLight_colorCtrlCb(pAddrInfo, ZCL_CMD_LIGHT_COLOR_CONTROL_MOVE_TO_COLOR_TEMPERATURE, &move2ColorTemp);
+				}
+				break;
+			}
 #endif
+			default:
+				break;
+		}
 
-#ifdef ZCL_LEVEL_CTRL
-	moveToLvl_t moveToLevel;
-	moveToLevel.level = level;
-	moveToLevel.transitionTime = pScene->transTime;
-	moveToLevel.optPresent = 0;
-
-	tuyaLight_levelCb(pAddrInfo, ZCL_CMD_LEVEL_MOVE_TO_LEVEL, &moveToLevel);
-#endif
-
-#ifdef ZCL_LIGHT_COLOR_CONTROL
-#if COLOR_RGB_SUPPORT
-	zcl_colorCtrlMoveToHueAndSaturationCmd_t move2HueAndSat;
-	move2HueAndSat.hue = hue;
-	move2HueAndSat.saturation = saturation;
-	move2HueAndSat.transitionTime = pScene->transTime;
-	move2HueAndSat.optPresent = 0;
-
-	tuyaLight_colorCtrlCb(pAddrInfo, ZCL_CMD_LIGHT_COLOR_CONTROL_MOVE_TO_HUE_AND_SATURATION, &move2HueAndSat);
-#elif COLOR_CCT_SUPPORT
-	zcl_colorCtrlMoveToColorTemperatureCmd_t move2ColorTemp;
-	move2ColorTemp.colorTemperature = colorTemperatureMireds;
-	move2ColorTemp.transitionTime = pScene->transTime;
-	move2ColorTemp.optPresent = 0;
-
-	tuyaLight_colorCtrlCb(pAddrInfo, ZCL_CMD_LIGHT_COLOR_CONTROL_MOVE_TO_COLOR_TEMPERATURE, &move2ColorTemp);
-#endif
-#endif
+		pField = pData + len;
+	}
 }
 
 /*********************************************************************
