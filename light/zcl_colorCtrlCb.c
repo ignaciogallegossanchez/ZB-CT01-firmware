@@ -132,6 +132,13 @@ void tuyaLight_colorInit(void)
 	pColor->colorMode = ZCL_COLOR_MODE_COLOR_TEMPERATURE_MIREDS;
 	pColor->enhancedColorMode = ZCL_COLOR_MODE_COLOR_TEMPERATURE_MIREDS;
 
+	// el SDK copia startUpColorTemperatureMireds sin limitarlo al rango fisico
+	if(pColor->colorTemperatureMireds < pColor->colorTempPhysicalMinMireds){
+		pColor->colorTemperatureMireds = pColor->colorTempPhysicalMinMireds;
+	}else if(pColor->colorTemperatureMireds > pColor->colorTempPhysicalMaxMireds){
+		pColor->colorTemperatureMireds = pColor->colorTempPhysicalMaxMireds;
+	}
+
 	colorInfo.currentColorTemp256 = (u32)(pColor->colorTemperatureMireds) << 8;
 	colorInfo.colorTempRemainingTime = 0;
 

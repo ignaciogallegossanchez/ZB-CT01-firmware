@@ -92,13 +92,50 @@ void pwmSetDuty(u8 ch, u16 dutycycle)
 }
 
 /*********************************************************************
+ * @fn      levelToTicks
+ *
+ * @brief   Ticks de PWM para un nivel de brillo: gamma cuadratica a la
+ *          resolucion completa del PWM, con el nivel 1 en el suelo medido
+ *          (PWM_MIN_TICK) y el maximo en PMW_MAX_TICK. Nivel 0 = apagado.
+ *
+ * @param   level	-	0..ZCL_LEVEL_ATTR_MAX_LEVEL
+ *
+ * @return  ticks (0..PMW_MAX_TICK)
+ */
+static u32 levelToTicks(u16 level)
+{
+	u32 maxLevel = ZCL_LEVEL_ATTR_MAX_LEVEL;
+
+	if(level == 0){
+		return 0;
+	}
+
+	return PWM_MIN_TICK + ((u32)level * level * (PMW_MAX_TICK - PWM_MIN_TICK)) / (maxLevel * maxLevel);
+}
+
+/*********************************************************************
+ * @fn      pwmSetChannelTicks
+ *
+ * @brief   Fija los ticks de un canal. Un canal encendido no baja del suelo
+ *          (PWM_MIN_TICK): por debajo el LED no emite.
+ *
+ * @param   ch		-	PWM channel
+ *          ticks	-	0..PMW_MAX_TICK; 0 = canal apagado
+ *
+ * @return  None
+ */
+static void pwmSetChannelTicks(u8 ch, u32 ticks)
+{
+	if((ticks > 0) && (ticks < PWM_MIN_TICK)){
+		ticks = PWM_MIN_TICK;
+	}
+	drv_pwm_cfg(ch, (u16)ticks, PMW_MAX_TICK);
+}
+
+/*********************************************************************
  * @fn      pwmSetLevelGamma
  *
- * @brief   Fija el duty de un canal a partir del nivel de brillo (0..max) con
- *          curva gamma cuadratica calculada a la resolucion completa del PWM.
- *          A diferencia de pwmSetDuty, no trunca a 0..100 en un paso intermedio,
- *          asi que los niveles bajos producen duties minusculos pero graduales
- *          (arregla el "minimo demasiado alto" y la falta de escalones abajo).
+ * @brief   Fija el duty de un canal a partir del nivel de brillo (ver levelToTicks).
  *
  * @param   ch		-	PWM channel
  *          level	-	0..ZCL_LEVEL_ATTR_MAX_LEVEL
@@ -108,22 +145,7 @@ void pwmSetDuty(u8 ch, u16 dutycycle)
 void pwmSetLevelGamma(u8 ch, u16 level)
 {
 #ifdef ZCL_LEVEL_CTRL
-	u32 maxLevel = ZCL_LEVEL_ATTR_MAX_LEVEL;
-	u32 span;
-	u32 cmp_tick;
-
-	if(level == 0){
-		// canal apagado: respeta el color puro en los extremos de temperatura
-		// (temperatureToCW deja C o W a 0) sin encenderlo por el suelo.
-		drv_pwm_cfg(ch, 0, PMW_MAX_TICK);
-		return;
-	}
-
-	// gamma cuadratica CON suelo: nivel minimo -> PWM_MIN_TICK (suelo medido),
-	// nivel maximo -> PMW_MAX_TICK, sin truncar la zona baja a 0.
-	span = PMW_MAX_TICK - PWM_MIN_TICK;
-	cmp_tick = PWM_MIN_TICK + ((u32)level * level * span) / (maxLevel * maxLevel);
-	drv_pwm_cfg(ch, (u16)cmp_tick, PMW_MAX_TICK);
+	pwmSetChannelTicks(ch, levelToTicks(level));
 #endif
 }
 
@@ -235,31 +257,11 @@ void hwLight_levelUpdate(u8 level)
 }
 
 /*********************************************************************
- * @fn      temperatureToCW
- *
- * @brief
- *
- * @param   [in]colorTemperatureMireds	-	colorTemperatureMireds attribute value
- * 			[in]level					-	level attribute value
- * 			[out]C						-	cool light PWM
- * 			[out]W						-	warm light PWM
- *
- * @return  None
- */
-void temperatureToCW(u16 temperatureMireds, u8 level, u8 *C, u8 *W)
-{
-#if COLOR_CCT_SUPPORT
-	zcl_lightColorCtrlAttr_t *pColor = zcl_colorAttrGet();
-
-	*W = (u8)(((temperatureMireds - pColor->colorTempPhysicalMinMireds) * level) / (pColor->colorTempPhysicalMaxMireds - pColor->colorTempPhysicalMinMireds));
-	*C = level - (*W);
-#endif
-}
-
-/*********************************************************************
  * @fn      hwLight_colorUpdate_colorTemperature
  *
- * @brief
+ * @brief   El nivel fija los ticks totales (misma curva que un solo canal) y
+ *          la temperatura solo los reparte entre frio y calido, asi el brillo
+ *          no cambia al mover la temperatura.
  *
  * @param   colorTemperatureMireds	-	colorTemperatureMireds attribute value
  * 			level					-	level attribute value
@@ -269,17 +271,26 @@ void temperatureToCW(u16 temperatureMireds, u8 level, u8 *C, u8 *W)
 void hwLight_colorUpdate_colorTemperature(u16 colorTemperatureMireds, u8 level)
 {
 #if COLOR_CCT_SUPPORT
-	u8 C = 0;
-	u8 W = 0;
+	zcl_lightColorCtrlAttr_t *pColor = zcl_colorAttrGet();
+	u16 minMireds = pColor->colorTempPhysicalMinMireds;
+	u16 maxMireds = pColor->colorTempPhysicalMaxMireds;
 
 	if(level < LIGHT_MIN_LEVEL){
 		level = LIGHT_MIN_LEVEL;
 	}
+	if(colorTemperatureMireds < minMireds){
+		colorTemperatureMireds = minMireds;
+	}else if(colorTemperatureMireds > maxMireds){
+		colorTemperatureMireds = maxMireds;
+	}
 
-	temperatureToCW(colorTemperatureMireds, level, &C, &W);
+	u32 total = levelToTicks(level);
+	u32 range = maxMireds - minMireds;
+	u32 warm = (total * (colorTemperatureMireds - minMireds) + range / 2) / range;
+	u32 cool = total - warm;
 
-	pwmSetLevelGamma(COOL_LIGHT_PWM_CHANNEL, C);
-	pwmSetLevelGamma(WARM_LIGHT_PWM_CHANNEL, W);
+	pwmSetChannelTicks(COOL_LIGHT_PWM_CHANNEL, cool);
+	pwmSetChannelTicks(WARM_LIGHT_PWM_CHANNEL, warm);
 #endif
 }
 
